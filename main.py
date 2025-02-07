@@ -18,12 +18,12 @@ images = glob.glob('media/*.jpeg')
 for fname in images:
   print(fname)
   img = cv.imread(fname)
+  # resize img
   img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2)))
   gray = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
-  #cv.imshow('gray', img_gray)
-  #cv.waitKey(500)
 
   # Find the chess board corners
+  # https://stackoverflow.com/a/76833504/24809902 for flags
   flags = cv.CALIB_CB_EXHAUSTIVE + cv.CALIB_CB_ACCURACY
   ret, corners = cv.findChessboardCornersSB(gray, (7,7), flags=flags)
 
