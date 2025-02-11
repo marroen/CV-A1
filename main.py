@@ -40,6 +40,7 @@ for fname in images:
     cv.imshow('img', img)
     cv.waitKey(500)
   else:
+    images.remove(fname)
     print("not found")
 
 cv.destroyAllWindows()
