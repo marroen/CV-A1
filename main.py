@@ -13,7 +13,9 @@ objp[:,:2] = np.mgrid[0:7,0:7].T.reshape(-1,2)
 objpoints = [] # 3d point in real world space
 imgpoints = [] # 2d points in image plane.
  
-images = glob.glob('media/*.jpeg')
+images = sorted(glob.glob('media/*.jpeg'))
+
+images_final = images.copy()
 
 for fname in images:
   print(fname)
@@ -40,7 +42,7 @@ for fname in images:
     cv.imshow('img', img)
     cv.waitKey(500)
   else:
-    images.remove(fname)
+    images_final.remove(fname)
     print("not found")
 
 cv.destroyAllWindows()
@@ -74,7 +76,7 @@ if len(rvecs) > 0:
     ])
     
     # Re-read the first image to draw the cube.
-    img = cv.imread(images[0])
+    img = cv.imread(images_final[0])
     img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2)))
 
     # Draw the chessboard corners on the image (using the first detected corners).
