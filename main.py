@@ -37,7 +37,7 @@ def manual_check():
    cv.imshow('img', img)
    
    cv.setMouseCallback('img', mouse_callback)
-   cv.waitKey(5000)
+   cv.waitKey(0)
 
 manual_check()
   
