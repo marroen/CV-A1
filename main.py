@@ -3,14 +3,14 @@ import numpy as np
 import glob
 
 # Stride length
-stride = 4.4 # cm
+stride = 44 # mm
 
 # Termination criteria
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
 # Prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(7,7,0)
 objp = np.zeros((7*7,3), np.float32)
-objp[:,:2] = np.mgrid[0:7,0:7].T.reshape(-1,2)
+objp[:,:2] = np.mgrid[0:7,0:7].T.reshape(-1,2) * stride
  
 # Arrays to store object points and image points from all the images.
 objpoints = [] # 3d point in real world space
@@ -37,7 +37,7 @@ def manual_check():
    cv.setMouseCallback('img', mouse_callback)
    cv.waitKey(0)
 
-manual_check()
+#manual_check()
   
 # Retrieve 2D and 3D points from chessboard images
 def get_points():
@@ -45,7 +45,7 @@ def get_points():
     print(fname)
     img = cv.imread(fname)
     # resize img
-    img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2)))
+    #img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2)))
     gray = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
     gray_final = gray
     cv.imshow('gray', gray)
@@ -72,6 +72,8 @@ def get_points():
       print("not found")
 
   cv.destroyAllWindows()
+
+get_points()
 
 def calibrate_camera():
    ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, gray_final.shape[::-1], None, None)
