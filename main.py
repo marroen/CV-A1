@@ -8,19 +8,21 @@ stride = 44 # mm
 # Termination criteria
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-# Prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(7,7,0)
+# Prepare object points on a 7x7 grid, like (0,0,0), (1,0,0), (2,0,0) ....,(7,7,0)
 objp = np.zeros((7*7,3), np.float32)
 objp[:,:2] = np.mgrid[0:7,0:7].T.reshape(-1,2) * stride
  
-# Arrays to store object points and image points from all the images.
+# Arrays to store object points and image points from all the images for calibration
 objpoints = [] # 3d point in real world space
 imgpoints = [] # 2d points in image plane.
  
+# Sort test images
 images = sorted(glob.glob('media/*.jpeg'))
 
 images_final = images.copy()
-gray_final = cv.imread(images[0], cv.IMREAD_GRAYSCALE)
+gray_final = cv.imread(images[0], cv.IMREAD_GRAYSCALE) # TEMP convert the images to grayscale for greater contrast
 
+# Initialize calibration flags
 ret, matrix, distortion_coef, rotation_vecs, translation_vecs = None, None, None, None, None
 
 # Function called upon mouse click
@@ -38,6 +40,32 @@ def manual_check():
    cv.waitKey(0)
 
 #manual_check()
+
+# Calculates the distance from the world origin to the camera
+def distance_to_camera():
+    global matrix, distortion_coef
+
+    # Checks for calibration errors
+    if not objpoints or not imgpoints:
+      print("Error! Image or object points missing.")
+      return None, None
+    if matrix is None or distortion_coef is None:
+      print("Error! Matrix or distortion coefficent missing.")
+      return None, None
+
+    # Gets rotation and translation vectors from solvePNP
+    success, rvec, tvec = cv.solvePnP(objpoints[0], imgpoints[0], matrix, distortion_coef)
+
+    if success:
+      # Find and print distance from origin to camera
+      distance = np.linalg.norm(tvec)
+      print(f"Distance to camera: {distance:.2f} mm")
+
+      return rvec, tvec
+
+    else:
+      print("Error! SolvePNP failed.")
+      return None, None
   
 # Retrieve 2D and 3D points from chessboard images
 def get_points():
@@ -73,10 +101,15 @@ def get_points():
 
   cv.destroyAllWindows()
 
-get_points()
-
+# Finds intrinsic and extrinsic camera parameters
 def calibrate_camera():
-   ret, matrix, distortion_coef, rotation_vecs, translation_vecs = cv.calibrateCamera(objpoints, imgpoints, gray_final.shape[::-1], None, None)
+  global matrix, distortion_coef, rotation_vecs, translation_vecs
+  ret, matrix, distortion_coef, rotation_vecs, translation_vecs = cv.calibrateCamera(objpoints, imgpoints, gray_final.shape[::-1], None, None)
+
+# Execution flow
+get_points()
+calibrate_camera()
+distance_to_camera()
 
 # Function to draw a cube on the image
 def draw_cube(img, imgpts):
