@@ -27,19 +27,43 @@ images_final = images.copy()
 # Initialize calibration variables
 ret, matrix, distortion_coef, rotation_vecs, translation_vecs = None, None, None, None, None
 
+clicked_points = []
+
 # Function called upon mouse click
 def mouse_callback(event, x, y, flags, param):
+    global clicked_points, img_display
     if event == cv.EVENT_LBUTTONDOWN:
-        print(x, y)
+        # Register the click
+        clicked_points.append((x, y))
+        # Draw a filled circle at the clicked point (red, radius 5)
+        cv.circle(img_display, (x, y), 5, (0, 0, 255), -1)
+        cv.imshow('img', img_display)
 
 # Print coordinates on mouse click
-def manual_check():
-   print("Manual check")
-   img = cv.imread(images[20])
-   cv.imshow('img', img)
-   
+def manual_check(fname):
+   global clicked_points, img_display
+   clicked_points = []  # Reset click storage
+
+   print("Manual check: please click:")
+   print("Top-left (but the bottom right of this square),")
+   print("Top-right (etc, should give a 6x6 instead of 8x8 grid),")
+   print("Bottom-right,")
+   print("Bottom-left.")
+   img = cv.imread(fname)
+
+   # Create a copy for displaying the clicks
+   img_display = img.copy()
+
+   cv.imshow('img', img_display)
    cv.setMouseCallback('img', mouse_callback)
-   cv.waitKey(0)
+
+   # Wait until 4 clicks have been collected or ESC is pressed.
+   while len(clicked_points) < 4:
+      if cv.waitKey(20) & 0xFF == 27:  # Exit if ESC key is pressed
+          break
+
+   cv.destroyAllWindows()
+   return np.array(clicked_points, dtype=np.float32).reshape(-1, 1, 2)
 
 # Calculates the distance from the world origin to the camera
 def distance_to_camera():
@@ -96,8 +120,6 @@ def get_points():
 
     # Preprocess each image to increase edge detection
     preprocessed = preprocessing(img)
-    cv.imshow("preprocessed", preprocessed)
-    #preprocessed = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
 
     # Find the chess board corners
     # https://stackoverflow.com/a/76833504/24809902 for flags
@@ -105,22 +127,52 @@ def get_points():
     ret, corners = cv.findChessboardCornersSB(preprocessed, (7,7), flags=flags)
 
     # If found, add object points, image points (after refining them)
-    if ret == True:
+    if ret:
       print("found")
       objpoints.append(objp)
       found += 1
 
-      corners2 = cv.cornerSubPix(preprocessed, corners, (11,11), (-1,-1), criteria)
-      imgpoints[fname] = corners2
+      refined_corners = cv.cornerSubPix(preprocessed, corners, (11,11), (-1,-1), criteria)
+      imgpoints[fname] = refined_corners
 
       # Draw and display the corners
-      cv.drawChessboardCorners(img, (7,7), corners2, ret)
+      cv.drawChessboardCorners(img, (7,7), refined_corners, ret)
       cv.imshow('img', img)
       cv.waitKey(500)
     else:
-      images_final.remove(fname)
       print("not found")
+      images_final.remove(fname)
+      interpolated_corners = manual_check(fname)
 
+      # Use 2D ideal grid corners for homography
+      # Define 4 corners of the ideal 7x7 grid (2D!)
+      ideal_manual_points = np.array([
+          [0, 0],    # top-left
+          [6, 0],    # top-right (7x7 grid has 0-6 in x)
+          [6, 6],    # bottom-right
+          [0, 6]     # bottom-left
+      ], dtype=np.float32).reshape(-1, 1, 2)
+
+      # Compute homography
+      H, _ = cv.findHomography(ideal_manual_points, interpolated_corners)
+
+      x, y = np.meshgrid(np.arange(7), np.arange(7))
+
+      ideal_grid = np.float32(np.vstack([x.ravel(), y.ravel()]).T).reshape(-1, 1, 2)
+
+      interpolated_corners = cv.perspectiveTransform(ideal_grid, H).reshape(-1, 2)
+
+      # Register the points
+      objpoints.append(objp)  # 3D object points
+      imgpoints[fname] = interpolated_corners
+      found += 1
+
+      # Draw and display the corners
+      draw_img = img.copy()
+      cv.drawChessboardCorners(draw_img, (7,7), interpolated_corners, True)
+      cv.imshow('img', draw_img)
+      cv.waitKey(500)
+      
   print("\nSuccessfully processed " + str(found) + " images.")
   cv.destroyAllWindows()
 
