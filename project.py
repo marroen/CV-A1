@@ -16,13 +16,18 @@ axis_points = np.float32([[stride*4,0,0], [0,stride*4,0], [0,0,-stride*4]]).resh
  
 # Arrays to store object points and image points for calibration from all images
 objpoints = [] # 3d points in real world space
-imgpoints = {} # 2d points in image plane.
+imgpoints_25 = {} # 2d points in image plane.
+imgpoints_10 = {}
+imgpoints_5 = {}
  
 # Sort test images
 images = sorted(glob.glob('media/*.jpeg'))
 
 # Stores images that have successfully passed corner detection
-images_final = images.copy()
+images_25 = images.copy()
+images_10 = []
+images_5 = []
+
 
 # Initialize calibration variables
 ret, matrix, distortion_coef, rotation_vecs, translation_vecs = None, None, None, None, None
@@ -70,7 +75,7 @@ def distance_to_camera():
     global matrix, distortion_coef
 
     # Checks for calibration errors
-    if not objpoints or not imgpoints:
+    if not objpoints or not imgpoints_25:
       print("Error! Image or object points missing.")
       return None, None
     if matrix is None or distortion_coef is None:
@@ -78,7 +83,7 @@ def distance_to_camera():
       return None, None
 
     # Gets rotation and translation vectors from solvePNP
-    success, rvec, tvec = cv.solvePnP(objpoints[0], imgpoints[images_final[0]], matrix, distortion_coef) # objpoints[0]?
+    success, rvec, tvec = cv.solvePnP(objpoints[0], imgpoints_25[images_25[0]], matrix, distortion_coef) # objpoints[0]?
 
     if success:
       # Find and print distance from origin to camera
@@ -109,72 +114,77 @@ def preprocessing(img):
 
 # Retrieve 2D and 3D points from chessboard images
 def get_points():
-  found = 0 #stores how many images are successfully processed
+    found = 0 #stores how many images are successfully processed
 
-  for fname in images:
-    print(fname)
-    img = cv.imread(fname)
+    for fname in images:
+      print(fname)
+      img = cv.imread(fname)
 
-    # Resize img (needs to be resized in projection as well if we decide to do so)
-    #img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2))) 
+      # Resize img (needs to be resized in projection as well if we decide to do so)
+      #img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2))) 
 
-    # Preprocess each image to increase edge detection
-    preprocessed = preprocessing(img)
+      # Preprocess each image to increase edge detection
+      preprocessed = preprocessing(img)
 
-    # Find the chess board corners
-    # https://stackoverflow.com/a/76833504/24809902 for flags
-    flags = cv.CALIB_CB_EXHAUSTIVE + cv.CALIB_CB_ACCURACY
-    ret, corners = cv.findChessboardCornersSB(preprocessed, (7,7), flags=flags)
+      # Find the chess board corners
+      # https://stackoverflow.com/a/76833504/24809902 for flags
+      flags = cv.CALIB_CB_EXHAUSTIVE + cv.CALIB_CB_ACCURACY
+      ret, corners = cv.findChessboardCornersSB(preprocessed, (7,7), flags=flags)
 
-    # If found, add object points, image points (after refining them)
-    if ret:
-      print("found")
-      objpoints.append(objp)
-      found += 1
+      # If found, add object points, image points (after refining them)
+      if ret:
+          print("found")
+          objpoints.append(objp) # correct?
+          found += 1
 
-      refined_corners = cv.cornerSubPix(preprocessed, corners, (11,11), (-1,-1), criteria)
-      imgpoints[fname] = refined_corners
+          refined_corners = cv.cornerSubPix(preprocessed, corners, (11,11), (-1,-1), criteria)
+          imgpoints_25[fname] = refined_corners
+          if not (found >= 10):
+              imgpoints_10[fname] = refined_corners
+              images_10.append(fname)
+              if not (found >= 5):
+                  imgpoints_5[fname] = refined_corners
+                  images_5.append(fname)
 
-      # Draw and display the corners
-      cv.drawChessboardCorners(img, (7,7), refined_corners, ret)
-      cv.imshow('img', img)
-      cv.waitKey(500)
-    else:
-      print("not found")
-      images_final.remove(fname)
-      interpolated_corners = manual_check(fname)
+          # Draw and display the corners
+          cv.drawChessboardCorners(img, (7,7), refined_corners, ret)
+          cv.imshow('img', img)
+          cv.waitKey(500)
+      else:
+          print("not found")
+          interpolated_corners = manual_check(fname)
 
-      # Use 2D ideal grid corners for homography
-      # Define 4 corners of the ideal 7x7 grid (2D!)
-      ideal_manual_points = np.array([
-          [0, 0],    # top-left
-          [6, 0],    # top-right (7x7 grid has 0-6 in x)
-          [6, 6],    # bottom-right
-          [0, 6]     # bottom-left
-      ], dtype=np.float32).reshape(-1, 1, 2)
+          # Use 2D ideal grid corners for homography
+          # Define 4 corners of the ideal 7x7 grid (2D!)
+          ideal_manual_points = np.array([
+              [0, 0],    # top-left
+              [6, 0],    # top-right (7x7 grid has 0-6 in x)
+              [6, 6],    # bottom-right
+              [0, 6]     # bottom-left
+          ], dtype=np.float32).reshape(-1, 1, 2)
 
-      # Compute homography
-      H, _ = cv.findHomography(ideal_manual_points, interpolated_corners)
+          # Compute homography
+          H, _ = cv.findHomography(ideal_manual_points, interpolated_corners)
 
-      x, y = np.meshgrid(np.arange(7), np.arange(7))
+          x, y = np.meshgrid(np.arange(7), np.arange(7))
 
-      ideal_grid = np.float32(np.vstack([x.ravel(), y.ravel()]).T).reshape(-1, 1, 2)
+          ideal_grid = np.float32(np.vstack([x.ravel(), y.ravel()]).T).reshape(-1, 1, 2)
 
-      interpolated_corners = cv.perspectiveTransform(ideal_grid, H).reshape(-1, 2)
+          interpolated_corners = cv.perspectiveTransform(ideal_grid, H).reshape(-1, 2)
 
-      # Register the points
-      objpoints.append(objp)  # 3D object points
-      imgpoints[fname] = interpolated_corners
-      found += 1
+          # Register the points
+          objpoints.append(objp)  # 3D object points
+          imgpoints_25[fname] = interpolated_corners
+          found += 1
 
-      # Draw and display the corners
-      draw_img = img.copy()
-      cv.drawChessboardCorners(draw_img, (7,7), interpolated_corners, True)
-      cv.imshow('img', draw_img)
-      cv.waitKey(500)
-      
-  print("\nSuccessfully processed " + str(found) + " images.")
-  cv.destroyAllWindows()
+          # Draw and display the corners
+          draw_img = img.copy()
+          cv.drawChessboardCorners(draw_img, (7,7), interpolated_corners, True)
+          cv.imshow('img', draw_img)
+          cv.waitKey(500)
+        
+    print("\nSuccessfully processed " + str(found) + " images.")
+    cv.destroyAllWindows()
 
 
 # 25 images
@@ -182,13 +192,14 @@ def get_points():
 # 5 out of the 10 from run 2
 # -> 3x of (ret, matrix, distortion_coef, rotation_vecs, translation_vecs)
 
-def calibrate_camera():
+def calibrate_camera(imgpoints):
     global matrix, distortion_coef, rotation_vecs, translation_vecs
     # Preprocesses the calibration image
     image = cv.imread(images[0])
     preprocessed = preprocessing(image)
 
     # Caibrate camera
+    # objpoints?
     ret, matrix, distortion_coef, rotation_vecs, translation_vecs = cv.calibrateCamera(objpoints, list(imgpoints.values()), preprocessed.shape[::-1], None, None)
     return CalibrationInstance(ret, matrix, distortion_coef, rotation_vecs, translation_vecs)
 
@@ -227,18 +238,22 @@ def project_cube():
           [2 * stride, 2 * stride, -2 * stride],
           [0         , 2 * stride, -2 * stride]
       ])
-    calibration = calibrate_camera()
-    rotation_vecs = calibration.rotation_vecs
-    translation_vecs = calibration.translation_vecs
-    matrix = calibration.matrix
-    distortion_coef = calibration.distortion_coef
+    calibration_25 = calibrate_camera(imgpoints_25)
+    calibration_10 = calibrate_camera(imgpoints_25)
+    calibration_5 = calibrate_camera(imgpoints_25)
+    rotation_vecs = calibration_25.rotation_vecs
+    translation_vecs = calibration_25.translation_vecs
+    matrix = calibration_25.matrix
+    distortion_coef = calibration_25.distortion_coef
 
     distance_to_camera()
 
-    fname = images_final[0]
+    test_idx = 1
+
+    fname = images_25[test_idx]
     img = cv.imread(fname)
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    corners2 = cv.cornerSubPix(gray, imgpoints[fname], (11,11), (-1,-1), criteria)
+    corners2 = cv.cornerSubPix(gray, imgpoints_25[fname], (11,11), (-1,-1), criteria)
     ret, rotation_vecs, translation_vecs = cv.solvePnP(objp, corners2, matrix, distortion_coef)
     axis_imgpts, jac = cv.projectPoints(axis_points, rotation_vecs, translation_vecs, matrix, distortion_coef)
     cube_imgpts, jac = cv.projectPoints(cube_points, rotation_vecs, translation_vecs, matrix, distortion_coef)
@@ -247,7 +262,7 @@ def project_cube():
     img = draw_cube(img, corners2, cube_imgpts)
 
     # Draw the chessboard corners on the image (using the first detected corners).
-    img = cv.drawChessboardCorners(img, (7,7), imgpoints[images_final[0]], True)
+    img = cv.drawChessboardCorners(img, (7,7), imgpoints_25[images_25[test_idx]], True)
 
     cv.imshow('img', img)
     k = cv.waitKey(0) & 0xFF
