@@ -75,7 +75,8 @@ def manual_check(fname):
     
     cv.destroyAllWindows()
 
-    # Create warped view
+    # CHOICE TASK
+    # Create warped view for improving linear interpolation
     src_points = np.array(clicked_points, dtype=np.float32)
     warped_size = 600
     dst_points = np.array([[0,0], [warped_size,0], 
@@ -229,6 +230,7 @@ def get_points():
 # 5 out of the 10 from run 2
 # -> 3x of (ret, matrix, distortion_coef, rotation_vecs, translation_vecs)
 
+# Calibrate camera with given image points, 2D and 3D TODO: objpoints
 def calibrate_camera(imgpoints):
     global matrix, distortion_coef, rotation_vecs, translation_vecs
     # Preprocesses the calibration image
@@ -240,6 +242,7 @@ def calibrate_camera(imgpoints):
     ret, matrix, distortion_coef, rotation_vecs, translation_vecs = cv.calibrateCamera(objpoints, list(imgpoints.values()), preprocessed.shape[::-1], None, None)
     return CalibrationInstance(ret, matrix, distortion_coef, rotation_vecs, translation_vecs)
 
+# Calculate axis coordinates and return image with it drawn
 def draw_axis(img, corners, imgpts):
     corner = tuple(corners[0].ravel().astype("int32"))
     imgpts = imgpts.astype("int32")
@@ -248,6 +251,7 @@ def draw_axis(img, corners, imgpts):
     img = cv.line(img, corner, tuple(imgpts[2].ravel()), (0,0,255), 5)
     return img
 
+# Calculate cube coordinates and return image with it drawn
 def draw_cube(img, corners, imgpts):
     imgpts = np.int32(imgpts).reshape(-1,2)
 
@@ -263,6 +267,7 @@ def draw_cube(img, corners, imgpts):
 
     return img
 
+# Project cube onto chessboard image
 def project_cube(webcam=False):
     print("projecting")
     cube_points = np.float32([
@@ -287,6 +292,8 @@ def project_cube(webcam=False):
 
     test_idx = 1
 
+    # CHOICE TASK
+    # Real-time projection of the cube with webcam
     if (webcam):
         while True:
             # Initialize webcam

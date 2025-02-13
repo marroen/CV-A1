@@ -1,3 +1,5 @@
+
+# ASCII art for the manual calibration guide
 def print_manual_calibration_guide():
     print("""
     ╭─────────────────────────────────────────────   ╮

@@ -1,5 +1,6 @@
 import cv2 as cv
 
+# Class to store calibration data and project 3D points to 2D image points
 class CalibrationInstance:
     def __init__(self, ret, matrix, distortion_coef, rotation_vecs, translation_vecs):
         self.ret = ret
