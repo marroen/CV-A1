@@ -21,7 +21,7 @@ images = sorted(glob.glob('media/*.jpeg'))
 images_final = images.copy()
 gray_final = cv.imread(images[0], cv.IMREAD_GRAYSCALE)
 
-ret, mtx, dist, rvecs, tvecs = None, None, None, None, None
+ret, matrix, distortion_coef, rotation_vecs, translation_vecs = None, None, None, None, None
 
 # Function called upon mouse click
 def mouse_callback(event, x, y, flags, param):
@@ -76,7 +76,7 @@ def get_points():
 get_points()
 
 def calibrate_camera():
-   ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, gray_final.shape[::-1], None, None)
+   ret, matrix, distortion_coef, rotation_vecs, translation_vecs = cv.calibrateCamera(objpoints, imgpoints, gray_final.shape[::-1], None, None)
 
 # Function to draw a cube on the image
 def draw_cube(img, imgpts):
@@ -97,7 +97,7 @@ def draw_cube(img, imgpts):
 # Projecting cube
 def project_cube():
   # If calibration succeeded and we have at least one chessboard pose, project and draw the cube.
-  if len(rvecs) > 0:
+  if len(rotation_vecs) > 0:
       # Define the 3D cube points (origin at the chessboard corner).
       cube_points = np.float32([
           [0, 0, 0],
@@ -118,7 +118,7 @@ def project_cube():
       img = cv.drawChessboardCorners(img, (7,7), imgpoints[0], True)
       
       # Use the first pose (rvec and tvec) from calibration.
-      imgpts, _ = cv.projectPoints(cube_points, rvecs[0], tvecs[0], mtx, dist)
+      imgpts, _ = cv.projectPoints(cube_points, rotation_vecs[0], translation_vecs[0], matrix, distortion_coef)
       
       # Draw the cube on the image.
       img = draw_cube(img, imgpts)
