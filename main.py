@@ -12,17 +12,17 @@ criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 objp = np.zeros((7*7,3), np.float32)
 objp[:,:2] = np.mgrid[0:7,0:7].T.reshape(-1,2) * stride
  
-# Arrays to store object points and image points from all the images for calibration
-objpoints = [] # 3d point in real world space
+# Arrays to store object points and image points for calibration from all images
+objpoints = [] # 3d points in real world space.
 imgpoints = [] # 2d points in image plane.
  
 # Sort test images
 images = sorted(glob.glob('media/*.jpeg'))
 
+# Stores images that have successfully passed corner detection
 images_final = images.copy()
-gray_final = cv.imread(images[0], cv.IMREAD_GRAYSCALE) # TEMP convert the images to grayscale for greater contrast
 
-# Initialize calibration flags
+# Initialize calibration variables
 ret, matrix, distortion_coef, rotation_vecs, translation_vecs = None, None, None, None, None
 
 # Function called upon mouse click
@@ -38,8 +38,6 @@ def manual_check():
    
    cv.setMouseCallback('img', mouse_callback)
    cv.waitKey(0)
-
-#manual_check()
 
 # Calculates the distance from the world origin to the camera
 def distance_to_camera():
@@ -59,36 +57,58 @@ def distance_to_camera():
     if success:
       # Find and print distance from origin to camera
       distance = np.linalg.norm(tvec)
-      print(f"Distance to camera: {distance:.2f} mm")
 
+      print(f"Distance to camera: {distance:.2f} mm")
       return rvec, tvec
 
     else:
       print("Error! SolvePNP failed.")
       return None, None
+
+# CHOICE TASK
+# Preprocesses the image for clarity, increasing corner detection rate
+def preprocessing(img):
+
+    # Convert image to grayscale
+    processed_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+
+    # Apply CLAHE preprocessing for increased contrast and glare reduction
+    clahe = cv.createCLAHE(clipLimit=20.0, tileGridSize=(8, 8))
+    processed_img = clahe.apply(processed_img)
+
+    # Apply slight gaussian blur to reduce the effect of glare on edge detection
+    processed_img = cv.GaussianBlur(processed_img, (5, 5), 0)
+
+    return processed_img
   
 # Retrieve 2D and 3D points from chessboard images
 def get_points():
+  found = 0 #stores how many images are successfully processed
+
   for fname in images:
     print(fname)
     img = cv.imread(fname)
-    # resize img
-    #img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2)))
-    gray = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
-    gray_final = gray
-    cv.imshow('gray', gray)
+
+    # Resize img
+    img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2)))
+
+    # Preprocess each image to increase edge detection
+    preprocessed = preprocessing(img)
+    cv.imshow("preprocessed", preprocessed)
+    #preprocessed = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
 
     # Find the chess board corners
     # https://stackoverflow.com/a/76833504/24809902 for flags
     flags = cv.CALIB_CB_EXHAUSTIVE + cv.CALIB_CB_ACCURACY
-    ret, corners = cv.findChessboardCornersSB(gray, (7,7), flags=flags)
+    ret, corners = cv.findChessboardCornersSB(preprocessed, (7,7), flags=flags)
 
     # If found, add object points, image points (after refining them)
     if ret == True:
       print("found")
       objpoints.append(objp)
+      found += 1
 
-      corners2 = cv.cornerSubPix(gray,corners, (11,11), (-1,-1), criteria)
+      corners2 = cv.cornerSubPix(preprocessed, corners, (11,11), (-1,-1), criteria)
       imgpoints.append(corners2)
 
       # Draw and display the corners
@@ -99,17 +119,21 @@ def get_points():
       images_final.remove(fname)
       print("not found")
 
+
+  print("\nSuccessfully processed " + str(found) + " images.")
+
   cv.destroyAllWindows()
 
 # Finds intrinsic and extrinsic camera parameters
 def calibrate_camera():
   global matrix, distortion_coef, rotation_vecs, translation_vecs
-  ret, matrix, distortion_coef, rotation_vecs, translation_vecs = cv.calibrateCamera(objpoints, imgpoints, gray_final.shape[::-1], None, None)
 
-# Execution flow
-get_points()
-calibrate_camera()
-distance_to_camera()
+  # Preprocesses the calibration image
+  image = cv.imread(images[0])
+  preprocessed = preprocessing(image)
+
+  # Caibrate camera
+  ret, matrix, distortion_coef, rotation_vecs, translation_vecs = cv.calibrateCamera(objpoints, imgpoints, preprocessed.shape[::-1], None, None)
 
 # Function to draw a cube on the image
 def draw_cube(img, imgpts):
@@ -159,3 +183,8 @@ def project_cube():
       cv.imshow('Cube Projection', img)
       cv.waitKey(0)
       cv.destroyAllWindows()
+
+# Execution flow
+get_points()
+calibrate_camera()
+distance_to_camera()
