@@ -28,6 +28,7 @@ images_25 = images.copy()
 images_10 = []
 images_5 = []
 
+flags = cv.CALIB_CB_EXHAUSTIVE + cv.CALIB_CB_ACCURACY
 
 # Initialize calibration variables
 ret, matrix, distortion_coef, rotation_vecs, translation_vecs = None, None, None, None, None
@@ -128,7 +129,7 @@ def get_points():
 
       # Find the chess board corners
       # https://stackoverflow.com/a/76833504/24809902 for flags
-      flags = cv.CALIB_CB_EXHAUSTIVE + cv.CALIB_CB_ACCURACY
+      
       ret, corners = cv.findChessboardCornersSB(preprocessed, (7,7), flags=flags)
 
       # If found, add object points, image points (after refining them)
@@ -226,7 +227,7 @@ def draw_cube(img, corners, imgpts):
 
     return img
 
-def project_cube():
+def project_cube(webcam=False):
     print("projecting")
     cube_points = np.float32([
           [0         , 0         , 0          ],
@@ -250,21 +251,55 @@ def project_cube():
 
     test_idx = 1
 
-    fname = images_25[test_idx]
-    img = cv.imread(fname)
-    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    corners2 = cv.cornerSubPix(gray, imgpoints_25[fname], (11,11), (-1,-1), criteria)
-    ret, rotation_vecs, translation_vecs = cv.solvePnP(objp, corners2, matrix, distortion_coef)
-    axis_imgpts, jac = cv.projectPoints(axis_points, rotation_vecs, translation_vecs, matrix, distortion_coef)
-    cube_imgpts, jac = cv.projectPoints(cube_points, rotation_vecs, translation_vecs, matrix, distortion_coef)
+    if (webcam):
+        while True:
+            # Initialize webcam
+            cap = cv.VideoCapture(0)
+            ret, frame = cap.read()
+            if not ret:
+              break
 
-    img = draw_axis(img, corners2, axis_imgpts)
-    img = draw_cube(img, corners2, cube_imgpts)
+            gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+            found, corners = cv.findChessboardCornersSB(gray, (7,7), flags=flags)
 
-    # Draw the chessboard corners on the image (using the first detected corners).
-    img = cv.drawChessboardCorners(img, (7,7), imgpoints_25[images_25[test_idx]], True)
+            if found:
+                # Solve PnP
+                ret, rvec, tvec = cv.solvePnP(objp, corners, matrix, distortion_coef)
+        
+                if ret:
+                    # Project cube
+                    cube_proj, _ = cv.projectPoints(cube_points, rvec, tvec, matrix, distortion_coef)
+                    cube_proj = cube_proj.reshape(-1, 2).astype(int)
+                    
+                    # Draw cube
+                    edges = [(0,1),(1,2),(2,3),(3,0),
+                            (4,5),(5,6),(6,7),(7,4),
+                            (0,4),(1,5),(2,6),(3,7)]
+                    for s, e in edges:
+                        cv.line(frame, tuple(cube_proj[s]), tuple(cube_proj[e]), (0,255,0), 2)
+            cv.imshow('AR Cube Projection', frame)
+            if cv.waitKey(1) & 0xFF == ord('q'):
+                break
+        cap.release()
+        cv.destroyAllWindows()
+    
+    else:
 
-    cv.imshow('img', img)
-    k = cv.waitKey(0) & 0xFF
-    if k == ord('s'):
-      cv.imwrite(fname[:6]+'.png', img)
+      fname = images_25[test_idx]
+      img = cv.imread(fname)
+      gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+      corners2 = cv.cornerSubPix(gray, imgpoints_25[fname], (11,11), (-1,-1), criteria)
+      ret, rotation_vecs, translation_vecs = cv.solvePnP(objp, corners2, matrix, distortion_coef)
+      axis_imgpts, jac = cv.projectPoints(axis_points, rotation_vecs, translation_vecs, matrix, distortion_coef)
+      cube_imgpts, jac = cv.projectPoints(cube_points, rotation_vecs, translation_vecs, matrix, distortion_coef)
+
+      img = draw_axis(img, corners2, axis_imgpts)
+      img = draw_cube(img, corners2, cube_imgpts)
+
+      # Draw the chessboard corners on the image (using the first detected corners).
+      img = cv.drawChessboardCorners(img, (7,7), imgpoints_25[images_25[test_idx]], True)
+
+      cv.imshow('img', img)
+      k = cv.waitKey(0) & 0xFF
+      if k == ord('s'):
+        cv.imwrite(fname[:6]+'.png', img)
