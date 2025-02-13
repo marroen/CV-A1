@@ -2,6 +2,7 @@ import cv2 as cv
 import numpy as np
 import glob
 from CalibrationInstance import CalibrationInstance
+import util
 
 # Stride length
 stride = 44 # mm
@@ -37,39 +38,74 @@ clicked_points = []
 
 # Function called upon mouse click
 def mouse_callback(event, x, y, flags, param):
-    global clicked_points, img_display
+    global clicked_points
     if event == cv.EVENT_LBUTTONDOWN:
-        # Register the click
-        clicked_points.append((x, y))
-        # Draw a filled circle at the clicked point (red, radius 5)
-        cv.circle(img_display, (x, y), 5, (0, 0, 255), -1)
-        cv.imshow('img', img_display)
+        if len(clicked_points) < 4:
+            clicked_points.append((x, y))
+            print(f"Clicked point {len(clicked_points)}: ({x}, {y})")
 
 # Print coordinates on mouse click
 def manual_check(fname):
-   global clicked_points, img_display
-   clicked_points = []  # Reset click storage
+    global clicked_points, img_display, warped_display
+    clicked_points = []  # Reset click storage
 
-   print("Manual check: please click:")
-   print("Top-left (but the bottom right of this square),")
-   print("Top-right (etc, should give a 6x6 instead of 8x8 grid),")
-   print("Bottom-right,")
-   print("Bottom-left.")
-   img = cv.imread(fname)
+    util.print_manual_calibration_guide()
+    img = cv.imread(fname)
 
-   # Create a copy for displaying the clicks
-   img_display = img.copy()
+    # Create a copy for displaying the clicks
+    img_display = img.copy()
 
-   cv.imshow('img', img_display)
-   cv.setMouseCallback('img', mouse_callback)
+    cv.namedWindow('Original Perspective')
+    cv.setMouseCallback('Original Perspective', mouse_callback)
+    
+    while True:
+        # Create temp image with current points
+        temp_img = img.copy()
+        for pt in clicked_points:
+            cv.circle(temp_img, tuple(pt), 5, (0, 0, 255), -1)
+        
+        cv.imshow('Original Perspective', temp_img)
+        key = cv.waitKey(20)
+        
+        if len(clicked_points) >= 4:
+            break
+        if key == 27:  # ESC pressed
+            cv.destroyAllWindows()
+            return None
+    
+    cv.destroyAllWindows()
 
-   # Wait until 4 clicks have been collected or ESC is pressed.
-   while len(clicked_points) < 4:
-      if cv.waitKey(20) & 0xFF == 27:  # Exit if ESC key is pressed
-          break
+    # Create warped view
+    src_points = np.array(clicked_points, dtype=np.float32)
+    warped_size = 600
+    dst_points = np.array([[0,0], [warped_size,0], 
+                         [warped_size,warped_size], [0,warped_size]], 
+                        dtype=np.float32)
+    M = cv.getPerspectiveTransform(src_points, dst_points)
+    warped = cv.warpPerspective(img, M, (warped_size, warped_size))
+    
+    # Second stage: warped perspective
+    clicked_points = []
+    warped_display = warped.copy()
+    
+    cv.namedWindow('Warped Perspective')
+    cv.setMouseCallback('Warped Perspective', mouse_callback)
+    while True:
+        cv.imshow('Warped Perspective', warped_display)
+        key = cv.waitKey(20)
+        if len(clicked_points) >= 4 or key == 27:
+            break
+    cv.destroyAllWindows()
+    
+    if len(clicked_points) < 4:
+        return None
 
-   cv.destroyAllWindows()
-   return np.array(clicked_points, dtype=np.float32).reshape(-1, 1, 2)
+    # Back-project points
+    warped_points = np.array(clicked_points, dtype=np.float32).reshape(-1, 1, 2)
+    _, Minv = cv.invert(M)
+    original_points = cv.perspectiveTransform(warped_points, Minv)
+    
+    return original_points.reshape(-1, 1, 2)
 
 # Calculates the distance from the world origin to the camera
 def distance_to_camera():
@@ -240,8 +276,8 @@ def project_cube(webcam=False):
           [0         , 2 * stride, -2 * stride]
       ])
     calibration_25 = calibrate_camera(imgpoints_25)
-    calibration_10 = calibrate_camera(imgpoints_25)
-    calibration_5 = calibrate_camera(imgpoints_25)
+    calibration_10 = calibrate_camera(imgpoints_25) # needs objpoints_10
+    calibration_5 = calibrate_camera(imgpoints_25)  # needs objpoints_5
     rotation_vecs = calibration_25.rotation_vecs
     translation_vecs = calibration_25.translation_vecs
     matrix = calibration_25.matrix
