@@ -140,6 +140,9 @@ def solvepnp_vectors(fname):
 # Preprocesses the image for clarity, increasing corner detection rate
 def preprocessing(img):
 
+    # Resize img (needs to be resized in projection as well if we decide to do so)
+    processed_img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2)))
+
     # Convert image to grayscale
     processed_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
@@ -174,9 +177,6 @@ def get_points(run, fname, found):
     points_for_fname = (np.empty(0), np.empty(0), 0, None)
     print(fname)
     img = cv.imread(fname)
-
-    # Resize img (needs to be resized in projection as well if we decide to do so)
-    img = cv.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2))) 
 
     # Preprocess each image to increase edge detection
     preprocessed = preprocessing(img)
@@ -225,7 +225,6 @@ def get_points(run, fname, found):
 
         # Register the points
         points_25[fname] = (objp, interpolated_corners)
-        found += 1
         points_for_fname = (objp, interpolated_corners, found, img)
 
         # Draw and display the corners
@@ -306,7 +305,7 @@ def draw_cube(img, corners, imgpts, fname, dist, orient=0, rot=255):
 # Project cube onto chessboard image
 def project_cube(run, webcam=False):
     print("projecting")
-    test_idx = 12
+    test_idx = 0
     
     calibration = None
     if run == 25:
@@ -333,7 +332,7 @@ def project_cube(run, webcam=False):
             cap = cv.VideoCapture(0)
             ret, frame = cap.read()
             if not ret:
-              break
+                break
             frame = cv.resize(frame, (int(frame.shape[1]/2), int(frame.shape[0]/2)))
             gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             found, corners = cv.findChessboardCornersSB(gray, (7,7), flags=flags)
@@ -362,9 +361,12 @@ def project_cube(run, webcam=False):
     # Non-webcam projection (on test image)
     else:
       # Sort test images
-      test_images = sorted(glob.glob('media/*.jpg') + glob.glob('media/*.jpeg'))
+      test_images = sorted(glob.glob('media/tests/*.jpg'))
 
-      print(test_idx)
+      print(len(points_25))
+      print(len(points_10))
+      print(len(points_5))
+
       fname = test_images[test_idx]
 
       # Automatically detect corners
