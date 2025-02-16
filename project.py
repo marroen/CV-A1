@@ -31,7 +31,7 @@ points_10 = {}
 points_5  = {}
  
 # Sort test images
-images = sorted(glob.glob('media/*.jpeg'))
+images = sorted(glob.glob('media/*.jpg') + glob.glob('media/*.jpeg'))
 
 # Flags for corner detection
 flags = cv.CALIB_CB_EXHAUSTIVE + cv.CALIB_CB_ACCURACY
@@ -161,6 +161,10 @@ def get_all_points(run):
         # Handling skipped images
         if new_found > found:
             found = new_found
+
+        # Once enough images have been processed for run, stop
+        if new_found >= run:
+            break
         
     print("\nSuccessfully processed " + str(found) + " images.")
     cv.destroyAllWindows()
@@ -246,6 +250,8 @@ def calibrate_camera(points):
 
     # Caibrate camera
     ret, matrix, distortion_coef, rotation_vecs, translation_vecs = cv.calibrateCamera(all_objpoints, all_imgpoints, preprocessed.shape[::-1], None, None)
+    print("Intrinsic Camera Matrix (K):\n", matrix)
+
     return CalibrationInstance(ret, matrix, distortion_coef, rotation_vecs, translation_vecs)
 
 # Calculate axis coordinates and return image with it drawn
@@ -300,7 +306,7 @@ def draw_cube(img, corners, imgpts, fname, dist, orient=0, rot=255):
 # Project cube onto chessboard image
 def project_cube(run, webcam=False):
     print("projecting")
-    test_idx = 0
+    test_idx = 12
     
     calibration = None
     if run == 25:
@@ -356,7 +362,9 @@ def project_cube(run, webcam=False):
     # Non-webcam projection (on test image)
     else:
       # Sort test images
-      test_images = sorted(glob.glob('media/tests/*.jpeg'))
+      test_images = sorted(glob.glob('media/*.jpg') + glob.glob('media/*.jpeg'))
+
+      print(test_idx)
       fname = test_images[test_idx]
 
       # Automatically detect corners

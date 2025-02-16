@@ -1,8 +1,8 @@
 import project
 
 def main():
-    #run = 25
-    run = 10
+    run = 25
+    #run = 10
     #run = 5
 
     project.get_all_points(run=run)
