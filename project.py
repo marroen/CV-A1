@@ -249,7 +249,7 @@ def calibrate_camera(points):
 
     # Caibrate camera
     ret, matrix, distortion_coef, rotation_vecs, translation_vecs = cv.calibrateCamera(all_objpoints, all_imgpoints, preprocessed.shape[::-1], None, None)
-    print("Intrinsic Camera Matrix (K):\n", matrix)
+    print("Intrinsic Camera Matrix:\n", matrix)
 
     return CalibrationInstance(ret, matrix, distortion_coef, rotation_vecs, translation_vecs)
 
@@ -273,11 +273,12 @@ def draw_cube(img, corners, imgpts, fname, dist, orient=0, rot=255):
     R, _ = cv.Rodrigues(rvec)
 
     roll, pitch, yaw = find_roll_pitch_yaw(R)
-    #print("Roll, Pitch, Yaw):", roll, pitch, yaw)
+    #print("roll, pitch, yaw):", roll, pitch, yaw)
 
     # Maps the values for yaw, pitch, and distance to HSV colorspace
-    H = int(179 * ((yaw + 90) / 180)) if -90 <= yaw <= 90 else (0 if yaw < -90 else 179)
-    S = int(255 * (1 - (pitch / 45))) if pitch < 45 else 0
+    # When the board is directly facing the camera: yaw, pitch, roll = [0, 0, 0]
+    H = int(179 * (1 - (abs(yaw) / 90))) if abs(yaw) <= 90 else 0
+    S = int(255 * (1 - (abs(pitch) / 45))) if abs(pitch) < 45 else 0
     V = int(255 * (1 - (dist / 4000))) if dist <= 4000 else 0
 
     # Ensures HSV values are in a valid range
