@@ -112,32 +112,30 @@ def manual_check(img):
     
     return original_points.reshape(-1, 1, 2)
 
-# Calculates the distance from the world origin to the camera
-def distance_to_camera(fname):
-    global matrix, distortion_coef
+#finds the roll, pitch, and yaw of the origin with respect to the camera
+def find_roll_pitch_yaw(R):
 
-    # Checks for calibration errors
-    if not points_25:
-      print("Error! Image or object points missing.")
-      return None, None, None
-    if matrix is None or distortion_coef is None:
-      print("Error! Matrix or distortion coefficent missing.")
-      return None, None, None
+    sy = np.sqrt(R[0, 0] ** 2 + R[0, 1] ** 2)
+
+    roll = np.arctan2(-R[1, 2], R[2, 2])
+    pitch = np.arctan2(R[0, 2], sy)
+    yaw = np.arctan2(R[0, 1], R[0, 0])
+
+    return np.degrees([roll, pitch, yaw])  # Return values in degrees
+
+# Calculates the distance from the world origin to the camera
+def solvepnp_vectors(fname):
+    global matrix, distortion_coef
 
     # Gets rotation and translation vectors from solvePNP
     success, rvec, tvec = cv.solvePnP(points_25[fname][0], points_25[fname][1], matrix, distortion_coef)
 
     if success:
-      # Find and print distance from origin to camera
-      distance = np.linalg.norm(tvec)
-
-      print(f"Distance to camera: {distance:.2f} mm")
-      return rvec, tvec, distance
-
+      return rvec, tvec
     else:
       print("Error! SolvePNP failed.")
       return None, None, None
-    
+
 # CHOICE TASK
 # Preprocesses the image for clarity, increasing corner detection rate
 def preprocessing(img):
@@ -150,7 +148,7 @@ def preprocessing(img):
     processed_img = clahe.apply(processed_img)
 
     # Apply slight gaussian blur to reduce the effect of glare on edge detection
-    processed_img = cv.GaussianBlur(processed_img, (5, 5), 0) # Improves detection for test image
+    processed_img = cv.GaussianBlur(processed_img, (5, 5), 0)
 
     return processed_img
 
@@ -237,6 +235,7 @@ def get_points(run, fname, found):
 # Calibrate camera with given image points, 2D and 3D
 def calibrate_camera(points):
     global matrix, distortion_coef, rotation_vecs, translation_vecs
+    
     # Preprocesses the calibration image
     image = cv.imread(images[0])
     preprocessed = preprocessing(image)
@@ -259,8 +258,32 @@ def draw_axis(img, corners, imgpts):
     return img
 
 # Calculate cube coordinates and return image with it drawn
-def draw_cube(img, corners, imgpts, dist=0, orient=0, rot=255):
+def draw_cube(img, corners, imgpts, fname, dist, orient=0, rot=255):
     imgpts = np.int32(imgpts).reshape(-1,2)
+
+    #gets the rotation vectors from solvepnp
+    rvec, _ = solvepnp_vectors(fname)
+
+    # Converts the rotation vectors to an object rotation matrix
+    R, _ = cv.Rodrigues(rvec)
+
+    roll, pitch, yaw = find_roll_pitch_yaw(R)
+    #print("Roll, Pitch, Yaw):", roll, pitch, yaw)
+
+    # Maps the values for yaw, pitch, and distance to HSV colorspace
+    H = int(179 * ((yaw + 90) / 180)) if -90 <= yaw <= 90 else (0 if yaw < -90 else 179)
+    S = int(255 * (1 - (pitch / 45))) if pitch < 45 else 0
+    V = int(255 * (1 - (dist / 4000))) if dist <= 4000 else 0
+
+    # Ensures HSV values are in a valid range
+    H = np.clip(H, 0, 179)
+    S = np.clip(S, 0, 255)
+    V = np.clip(V, 0, 255)
+
+    # Convert HSV to BGR
+    hsv_color = np.uint8([[[H, S, V]]])
+    bgr_color = cv.cvtColor(hsv_color, cv.COLOR_HSV2BGR)[0][0]
+    B, G, R = map(int, bgr_color)
 
     # base
     img = cv.drawContours(img, [imgpts[:4]], -1, (0,255,0), 1)
@@ -270,7 +293,7 @@ def draw_cube(img, corners, imgpts, dist=0, orient=0, rot=255):
       img = cv.line(img, tuple(imgpts[i]), tuple(imgpts[j]), (255), 1)
 
     # top
-    img = cv.drawContours(img, [imgpts[4:]], -1, (dist,orient,rot), -1)
+    img = cv.drawContours(img, [imgpts[4:]], -1, (B,G,R), -1)
 
     return img
 
@@ -293,7 +316,6 @@ def project_cube(run, webcam=False):
     # Set calibration variables
     matrix = calibration.matrix
     distortion_coef = calibration.distortion_coef
-    # TODO: maybe we need to use these for orientation and rotation for HSV drawing?
     rotation_vecs = calibration.rotation_vecs
     translation_vecs = calibration.translation_vecs
 
@@ -343,7 +365,10 @@ def project_cube(run, webcam=False):
         print("Error! Not automatically detected.")
         return
 
-      _, _, dist = distance_to_camera(fname)
+      # Find and print distance from origin to camera
+      pnp_rvec, pnp_tvec = solvepnp_vectors(fname)
+      dist = np.linalg.norm(pnp_tvec)
+      print(f"Distance to camera: {dist:.2f} mm")
 
       img = test_points[3] # Same img (halved) from where points are initially extracted
       preprocessed = preprocessing(img)
@@ -355,8 +380,7 @@ def project_cube(run, webcam=False):
       cube_imgpts, _ = cv.projectPoints(cube_points, rvec, tvec, matrix, distortion_coef)
 
       img = draw_axis(img, refined_corners, axis_imgpts)
-      # TODO: HSV drawn cube
-      img = draw_cube(img, refined_corners, cube_imgpts, dist=dist)
+      img = draw_cube(img, refined_corners, cube_imgpts, fname, dist)
 
       # Draw the chessboard corners on the image (using the first detected corners).
       img = cv.drawChessboardCorners(img, (7,7), test_points[1], True)
